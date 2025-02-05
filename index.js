@@ -1,33 +1,33 @@
 const http = require('http')
-const http2 = require('http2')
-const fs = require('fs')
+const url = require('url')
 
-// 创建 HTTP 服务器
-const httpServer = http.createServer((req, res) => {
-  res.setHeader('Content-Type', 'text/plain')
-  res.end('Hello, HTTP!\n')
+const proxy = http.createServer((req, res) => {
+  const { path } = url.parse(req.url)
+  const options = {
+    hostname: req.headers.host.split(':')[0],
+    port: req.headers.host.split(':')[1] ?? 80,
+    path,
+    method: req.method,
+    headers: req.headers,
+  }
+  const proxyReq = http.request(options, (proxyRes) => {
+    console.log(
+      `Proxy request to: ${options.hostname}:${options.port}${options.path}`
+    )
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+    proxyRes.pipe(res)
+  })
+
+  proxyReq.on('error', (error) => {
+    console.error(`Proxy request error: ${error.message}`)
+    res.statusCode = 500
+    res.end('Proxy request error')
+  })
+
+  req.pipe(proxyReq)
 })
 
-const httpPort = 80
-httpServer.listen(httpPort, () => {
-  console.log(`HTTP server running on port ${httpPort}`)
-})
-
-const options = {
-  key: fs.readFileSync('server.key'),
-  cert: fs.readFileSync('server.crt'),
-  allowHTTP1: true,
-}
-
-// 创建 HTTPS 服务器
-const httpsServer = http2.createSecureServer(options, (req, res) => {
-  res.setHeader('Content-Type', 'text/plain')
-  res.end('Hello, HTTPS/1.x and HTTPS/2!\n')
-})
-
-const httpsPort = 443
-httpsServer.listen(httpsPort, () => {
-  console.log(
-    `Server running on port ${httpsPort}, supporting HTTP/1.x and HTTP/2`
-  )
+const port = 8888
+proxy.listen(port, () => {
+  console.log(`HTTP proxy server running on port ${port}`)
 })
